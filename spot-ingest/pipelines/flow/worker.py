@@ -22,7 +22,8 @@ import subprocess
 import datetime
 import logging
 import os
-import json 
+import json
+from impala.dbapi import connect
 from multiprocessing import Process
 from common.utils import Util
 
@@ -50,6 +51,18 @@ class Worker(object):
         self._local_staging = self._conf['local_staging']
         self.kafka_consumer = kafka_consumer
 
+        # TODO: Init impyla connection
+        self._hs2_host = os.getenv("HS2_HOST")
+        self._hs2_port = os.getenv("HS2_PORT")
+        self._conn = connect(
+            host=self._hs2_host,
+            port=int(self._hs2_port),
+            auth_mechanism='GSSAPI',
+            kerberos_service_name='hive',
+            database=db_name
+        )
+        self._cursor = self._conn.cursor()
+
     def start(self):
 
         self._logger.info("Listening topic:{0}".format(self.kafka_consumer.Topic))
@@ -59,11 +72,11 @@ class Worker(object):
     def _new_file(self,file):
 
         self._logger.info("-------------------------------------- New File received --------------------------------------")
-        self._logger.info("File: {0} ".format(file))        
+        self._logger.info("File: {0} ".format(file))
         p = Process(target=self._process_new_file, args=(file,))
         p.start()
         p.join()
-        
+
     def _process_new_file(self,file):
 
         # get file from hdfs
@@ -84,7 +97,7 @@ class Worker(object):
         # build process cmd.
         process_cmd = "nfdump -o csv -r {0}{1} {2} > {0}{1}.csv".format(self._local_staging,file_name,self._process_opt)
         self._logger.info("Processing file: {0}".format(process_cmd))
-        Util.execute_cmd(process_cmd,self._logger)        
+        Util.execute_cmd(process_cmd,self._logger)
 
         # create hdfs staging.
         hdfs_path = "{0}/flow".format(self._hdfs_app_path)
@@ -99,11 +112,94 @@ class Worker(object):
         self._logger.info("Moving data to staging: {0}".format(mv_to_staging))
         subprocess.call(mv_to_staging,shell=True)
 
-        #load to avro
-        load_to_avro_cmd = "hive -hiveconf dbname={0} -hiveconf y={1} -hiveconf m={2} -hiveconf d={3} -hiveconf h={4} -hiveconf data_location='{5}' -f pipelines/flow/load_flow_avro_parquet.hql".format(self._db_name,flow_year,flow_month,flow_day,flow_hour,hdfs_staging_path)
+        # load with impyla
+        drop_table = "DROP TABLE IF EXISTS {0}.flow_tmp".format(self._db_name)
+        self._logger.info( "Dropping temp table: {0}".format(drop_table))
+        self._cursor.execute(drop_table)
 
-        self._logger.info( "Loading data to hive: {0}".format(load_to_avro_cmd))
-        Util.execute_cmd(load_to_avro_cmd,self._logger)
+        create_external = """
+          CREATE EXTERNAL TABLE {0}.flow_tmp (
+            treceived STRING,
+            tryear INT,
+            trmonth INT,
+            trday INT,
+            trhour INT,
+            trminute INT,
+            trsec INT,
+            tdur FLOAT,
+            sip  STRING,
+            dip STRING,
+            sport INT,
+            dport INT,
+            proto STRING,
+            flag STRING,
+            fwd INT,
+            stos INT,
+            ipkt BIGINT,
+            ibyt BIGINT,
+            opkt BIGINT,
+            obyt BIGINT,
+            input INT,
+            output INT,
+            sas INT,
+            das INT,
+            dtos INT,
+            dir INT,
+            rip STRING
+            )
+            ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+            STORED AS TEXTFILE
+            LOCATION '{1}'
+            TBLPROPERTIES ('avro.schema.literal'='{
+            "type":   "record"
+            , "name":   "RawFlowRecord"
+            , "namespace" : "com.cloudera.accelerators.flows.avro"
+            , "fields": [
+                {"name": "treceived",               "type":["string",   "null"]}
+                ,  {"name": "tryear",                "type":["float",   "null"]}
+                ,  {"name": "trmonth",               "type":["float",   "null"]}
+                ,  {"name": "trday",                 "type":["float",   "null"]}
+                ,  {"name": "trhour",                "type":["float",   "null"]}
+                ,  {"name": "trminute",              "type":["float",   "null"]}
+                ,  {"name": "trsec",                 "type":["float",   "null"]}
+                ,  {"name": "tdur",                  "type":["float",   "null"]}
+                ,  {"name": "sip",                  "type":["string",   "null"]}
+                ,  {"name": "sport",                   "type":["int",   "null"]}
+                ,  {"name": "dip",                  "type":["string",   "null"]}
+                ,  {"name": "dport",                   "type":["int",   "null"]}
+                ,  {"name": "proto",                "type":["string",   "null"]}
+                ,  {"name": "flag",                 "type":["string",   "null"]}
+                ,  {"name": "fwd",                     "type":["int",   "null"]}
+                ,  {"name": "stos",                    "type":["int",   "null"]}
+                ,  {"name": "ipkt",                 "type":["bigint",   "null"]}
+                ,  {"name": "ibytt",                "type":["bigint",   "null"]}
+                ,  {"name": "opkt",                 "type":["bigint",   "null"]}
+                ,  {"name": "obyt",                 "type":["bigint",   "null"]}
+                ,  {"name": "input",                   "type":["int",   "null"]}
+                ,  {"name": "output",                  "type":["int",   "null"]}
+                ,  {"name": "sas",                     "type":["int",   "null"]}
+                ,  {"name": "das",                     "type":["int",   "null"]}
+                ,  {"name": "dtos",                    "type":["int",   "null"]}
+                ,  {"name": "dir",                     "type":["int",   "null"]}
+                ,  {"name": "rip",                  "type":["string",   "null"]}
+            ]
+          }')
+          """.format(self._db_name, hdfs_staging_path)
+        self._logger.info( "Creating external table: {0}".format(create_external))
+        self._cursor.execute(create_external)
+
+        insert_into_table = """
+        INSERT INTO TABLE {0}.flow
+        PARTITION (y={1}, m={2}, d={3}, h={4})
+        SELECT   treceived,  unix_timestamp(treceived) AS unix_tstamp, tryear,  trmonth, trday,  trhour,  trminute,  trsec,
+          tdur,  sip, dip, sport, dport,  proto,  flag,  fwd,  stos,  ipkt,  ibyt,  opkt,  obyt,  input,  output,
+          sas,  das,  dtos,  dir,  rip
+        FROM {0}.flow_tmp
+        """.format(self._db_name, flow_year, flow_month, flow_day, flow_hour)
+        self._logger.info( "Loading data to {1}: {0}".format(insert_into_table,
+                                                             self._db_name
+                                                             ))
+        self._cursor.execute(insert_into_table)
 
         # remove from hdfs staging
         rm_hdfs_staging_cmd = "hadoop fs -rm -R -skipTrash {0}".format(hdfs_staging_path)
@@ -116,5 +212,3 @@ class Worker(object):
         Util.execute_cmd(rm_local_staging,self._logger)
 
         self._logger.info("File {0} was successfully processed.".format(file_name))
-
-
