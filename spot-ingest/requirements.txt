@@ -1,2 +1,6 @@
 watchdog
 kafka-python
+thrift_sasl
+sasl
+gssapi
+impyla
