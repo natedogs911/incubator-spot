@@ -117,74 +117,74 @@ class Worker(object):
         self._logger.info( "Dropping temp table: {0}".format(drop_table))
         self._cursor.execute(drop_table)
 
-        create_external = """
-          CREATE EXTERNAL TABLE {0}.flow_tmp (
-            treceived STRING,
-            tryear INT,
-            trmonth INT,
-            trday INT,
-            trhour INT,
-            trminute INT,
-            trsec INT,
-            tdur FLOAT,
-            sip  STRING,
-            dip STRING,
-            sport INT,
-            dport INT,
-            proto STRING,
-            flag STRING,
-            fwd INT,
-            stos INT,
-            ipkt BIGINT,
-            ibyt BIGINT,
-            opkt BIGINT,
-            obyt BIGINT,
-            input INT,
-            output INT,
-            sas INT,
-            das INT,
-            dtos INT,
-            dir INT,
-            rip STRING
-            )
-            ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
-            STORED AS TEXTFILE
-            LOCATION '{1}'
-            TBLPROPERTIES ('avro.schema.literal'='{
-            "type":   "record"
-            , "name":   "RawFlowRecord"
-            , "namespace" : "com.cloudera.accelerators.flows.avro"
-            , "fields": [
-                {"name": "treceived",               "type":["string",   "null"]}
-                ,  {"name": "tryear",                "type":["float",   "null"]}
-                ,  {"name": "trmonth",               "type":["float",   "null"]}
-                ,  {"name": "trday",                 "type":["float",   "null"]}
-                ,  {"name": "trhour",                "type":["float",   "null"]}
-                ,  {"name": "trminute",              "type":["float",   "null"]}
-                ,  {"name": "trsec",                 "type":["float",   "null"]}
-                ,  {"name": "tdur",                  "type":["float",   "null"]}
-                ,  {"name": "sip",                  "type":["string",   "null"]}
-                ,  {"name": "sport",                   "type":["int",   "null"]}
-                ,  {"name": "dip",                  "type":["string",   "null"]}
-                ,  {"name": "dport",                   "type":["int",   "null"]}
-                ,  {"name": "proto",                "type":["string",   "null"]}
-                ,  {"name": "flag",                 "type":["string",   "null"]}
-                ,  {"name": "fwd",                     "type":["int",   "null"]}
-                ,  {"name": "stos",                    "type":["int",   "null"]}
-                ,  {"name": "ipkt",                 "type":["bigint",   "null"]}
-                ,  {"name": "ibytt",                "type":["bigint",   "null"]}
-                ,  {"name": "opkt",                 "type":["bigint",   "null"]}
-                ,  {"name": "obyt",                 "type":["bigint",   "null"]}
-                ,  {"name": "input",                   "type":["int",   "null"]}
-                ,  {"name": "output",                  "type":["int",   "null"]}
-                ,  {"name": "sas",                     "type":["int",   "null"]}
-                ,  {"name": "das",                     "type":["int",   "null"]}
-                ,  {"name": "dtos",                    "type":["int",   "null"]}
-                ,  {"name": "dir",                     "type":["int",   "null"]}
-                ,  {"name": "rip",                  "type":["string",   "null"]}
-            ]
-          }')
-          """.format(self._db_name, hdfs_staging_path)
+        create_external = ("\n"
+                           "CREATE EXTERNAL TABLE {0}.flow_tmp (\n"
+                           "  treceived STRING,\n"
+                           "  tryear INT,\n"
+                           "  trmonth INT,\n"
+                           "  trday INT,\n"
+                           "  trhour INT,\n"
+                           "  trminute INT,\n"
+                           "  trsec INT,\n"
+                           "  tdur FLOAT,\n"
+                           "  sip  STRING,\n"
+                           "  dip STRING,\n"
+                           "  sport INT,\n"
+                           "  dport INT,\n"
+                           "  proto STRING,\n"
+                           "  flag STRING,\n"
+                           "  fwd INT,\n"
+                           "  stos INT,\n"
+                           "  ipkt BIGINT,\n"
+                           "  ibyt BIGINT,\n"
+                           "  opkt BIGINT,\n"
+                           "  obyt BIGINT,\n"
+                           "  input INT,\n"
+                           "  output INT,\n"
+                           "  sas INT,\n"
+                           "  das INT,\n"
+                           "  dtos INT,\n"
+                           "  dir INT,\n"
+                           "  rip STRING\n"
+                           "  )\n"
+                           "  ROW FORMAT DELIMITED FIELDS TERMINATED BY ','\n"
+                           "  STORED AS TEXTFILE\n"
+                           "  LOCATION '{1}'\n"
+                           "  TBLPROPERTIES ('avro.schema.literal'='{{\n"
+                           "  \"type\":   \"record\"\n"
+                           "  , \"name\":   \"RawFlowRecord\"\n"
+                           "  , \"namespace\" : \"com.cloudera.accelerators.flows.avro\"\n"
+                           "  , \"fields\": [\n"
+                           "      {{\"name\": \"treceived\",             \"type\":[\"string\",   \"null\"]}}\n"
+                           "      ,  {{\"name\": \"tryear\",              \"type\":[\"float\",   \"null\"]}}\n"
+                           "      ,  {{\"name\": \"trmonth\",             \"type\":[\"float\",   \"null\"]}}\n"
+                           "      ,  {{\"name\": \"trday\",               \"type\":[\"float\",   \"null\"]}}\n"
+                           "      ,  {{\"name\": \"trhour\",              \"type\":[\"float\",   \"null\"]}}\n"
+                           "      ,  {{\"name\": \"trminute\",            \"type\":[\"float\",   \"null\"]}}\n"
+                           "      ,  {{\"name\": \"trsec\",               \"type\":[\"float\",   \"null\"]}}\n"
+                           "      ,  {{\"name\": \"tdur\",                \"type\":[\"float\",   \"null\"]}}\n"
+                           "      ,  {{\"name\": \"sip\",                \"type\":[\"string\",   \"null\"]}}\n"
+                           "      ,  {{\"name\": \"sport\",                 \"type\":[\"int\",   \"null\"]}}\n"
+                           "      ,  {{\"name\": \"dip\",                \"type\":[\"string\",   \"null\"]}}\n"
+                           "      ,  {{\"name\": \"dport\",                 \"type\":[\"int\",   \"null\"]}}\n"
+                           "      ,  {{\"name\": \"proto\",              \"type\":[\"string\",   \"null\"]}}\n"
+                           "      ,  {{\"name\": \"flag\",               \"type\":[\"string\",   \"null\"]}}\n"
+                           "      ,  {{\"name\": \"fwd\",                   \"type\":[\"int\",   \"null\"]}}\n"
+                           "      ,  {{\"name\": \"stos\",                  \"type\":[\"int\",   \"null\"]}}\n"
+                           "      ,  {{\"name\": \"ipkt\",               \"type\":[\"bigint\",   \"null\"]}}\n"
+                           "      ,  {{\"name\": \"ibytt\",              \"type\":[\"bigint\",   \"null\"]}}\n"
+                           "      ,  {{\"name\": \"opkt\",               \"type\":[\"bigint\",   \"null\"]}}\n"
+                           "      ,  {{\"name\": \"obyt\",               \"type\":[\"bigint\",   \"null\"]}}\n"
+                           "      ,  {{\"name\": \"input\",                 \"type\":[\"int\",   \"null\"]}}\n"
+                           "      ,  {{\"name\": \"output\",                \"type\":[\"int\",   \"null\"]}}\n"
+                           "      ,  {{\"name\": \"sas\",                   \"type\":[\"int\",   \"null\"]}}\n"
+                           "      ,  {{\"name\": \"das\",                   \"type\":[\"int\",   \"null\"]}}\n"
+                           "      ,  {{\"name\": \"dtos\",                  \"type\":[\"int\",   \"null\"]}}\n"
+                           "      ,  {{\"name\": \"dir\",                   \"type\":[\"int\",   \"null\"]}}\n"
+                           "      ,  {{\"name\": \"rip\",                \"type\":[\"string\",   \"null\"]}}\n"
+                           "  ]\n"
+                           "  }}')\n"
+                           ).format(self._db_name, hdfs_staging_path)
         self._logger.info( "Creating external table: {0}".format(create_external))
         self._cursor.execute(create_external)
 
