@@ -3,6 +3,19 @@
     "hdfs_app_path" : "hdfs application path",
     "collector_processes":5,
     "ingestion_interval":1,
+    "kerberos":{
+      "enabled": "false",
+      "principal": "user",
+      "keytab": "/opt/security/user.keytab",
+      "sasl_mech":"GSSAPI",
+      "security_proto":"SASL_PLAINTEXT",
+      "min_relogin": 6000
+    },
+    "ssl": {
+      "ca_location": "",
+      "cert_location": "",
+      "key_location": ""
+    },
     "spark-streaming":{
                 "driver_memory":"",
                 "spark_exec":"",
