@@ -51,7 +51,6 @@ class Worker(object):
         self._local_staging = self._conf['local_staging']
         self.kafka_consumer = kafka_consumer
 
-        # TODO: Init impyla connection
         self._hs2_host = os.getenv("HS2_HOST")
         self._hs2_port = os.getenv("HS2_PORT")
         self._conn = connect(
@@ -182,8 +181,8 @@ class Worker(object):
                            "      ,  {{\"name\": \"dtos\",                  \"type\":[\"int\",   \"null\"]}}\n"
                            "      ,  {{\"name\": \"dir\",                   \"type\":[\"int\",   \"null\"]}}\n"
                            "      ,  {{\"name\": \"rip\",                \"type\":[\"string\",   \"null\"]}}\n"
-                           "  ]\n"
-                           "  }}')\n"
+                           "      ]\n"
+                           "}}')\n"
                            ).format(self._db_name, hdfs_staging_path)
         self._logger.info( "Creating external table: {0}".format(create_external))
         self._cursor.execute(create_external)
@@ -196,9 +195,9 @@ class Worker(object):
           sas,  das,  dtos,  dir,  rip
         FROM {0}.flow_tmp
         """.format(self._db_name, flow_year, flow_month, flow_day, flow_hour)
-        self._logger.info( "Loading data to {1}: {0}".format(insert_into_table,
-                                                             self._db_name
-                                                             ))
+        self._logger.info( "Loading data to {0}: {1}"
+                           .format(self._db_name, insert_into_table)
+                           )
         self._cursor.execute(insert_into_table)
 
         # remove from hdfs staging
