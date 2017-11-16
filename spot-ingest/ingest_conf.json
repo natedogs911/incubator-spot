@@ -10,12 +10,13 @@
         "sasl_mech": "GSSAPI",
         "security_proto": "SASL_PLAINTEXT",
         "service_name": "",
+        "kinit": "",
         "min_relogin": 6000
     },
-    "ssl": {
+    "ssl":{
         "ca_location": "",
-        "cert_location": "",
-        "key_location": ""
+        "cert": "",
+        "key": ""
     },
     "spark-streaming":{
         "driver_memory":"",

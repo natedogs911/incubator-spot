@@ -81,8 +81,8 @@ class KafkaTopic(object):
 
         if 'SSL' in kerbconf['security_proto']:
             connection_conf.update({
-                'ssl.certificate.location': sslconf['ca_cert'],
                 'ssl.ca.location': sslconf['ca_location'],
+                'ssl.certificate.location': sslconf['cert'],
                 'ssl.key.location': sslconf['key']
             })
 
