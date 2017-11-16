@@ -76,7 +76,7 @@ def start_collector(type,workers_num,id=None):
     zk_port = master_conf["kafka"]['zookeper_port']
          
     topic = "SPOT-INGEST-{0}_{1}".format(type,ingest_id) if not id else id
-    kafka = KafkaTopic(topic,k_server,k_port,zk_server,zk_port,workers_num,conf_file)
+    kafka = KafkaTopic(topic,k_server,k_port,zk_server,zk_port,workers_num)
 
     # create a collector instance based on data source type.
     logger.info("Starting {0} ingest instance".format(topic))

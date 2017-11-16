@@ -49,7 +49,7 @@ class Collector(object):
         conf = json.loads(open(conf_file).read())
         self._conf = conf["pipelines"][conf_type]
 
-        self._kafka_conf = KafkaTopic.producer_config(self._kafka_topic, self._kafka_topic.BootstrapServers, conf)
+        self._kafka_conf = KafkaTopic.producer_config(self._kafka_topic.BootstrapServers, conf)
 
         # set configuration.
         self._collector_path = self._conf['collector_path']        
