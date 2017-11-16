@@ -20,9 +20,8 @@
 import logging
 import os
 from common.utils import Util
-from kafka import KafkaProducer
-from kafka import KafkaConsumer as KC
-from kafka.partitioner.roundrobin import RoundRobinPartitioner
+from confluent_kafka import Producer
+from confluent_kafka import Consumer
 from kafka.common import TopicPartition
 
 class KafkaTopic(object):
@@ -50,15 +49,48 @@ class KafkaTopic(object):
         # create topic with partitions
         self._create_topic()
 
+    @classmethod
+    def producer_config(cls, server, conf):
+        # type: (dict) -> dict
+        """Returns a configuration dictionary containing optional values"""
+
+        kerbconf = conf['kerberos']
+        sslconf = conf['ssl']
+
+        connection_conf = {
+            'bootstrap.servers': server,
+            'api.version.request.timeout.ms': 3600000
+        }
+
+        if kerbconf['enabled'] == 'true':
+            connection_conf.update({
+                'sasl.mechanisms': kerbconf['sasl_mech'],
+                'security.protocol': kerbconf['security_proto'],
+                'sasl.kerberos.principal': kerbconf['principal'],
+                'sasl.kerberos.keytab': kerbconf['keytab'],
+                'sasl.kerberos.min.time.before.relogin': kerbconf['min_relogin']
+            })
+
+            sn = kerbconf['service_name']
+            if sn:
+                connection_conf.update({'sasl.kerberos.service.name': sn})
+
+            kinit_cmd = kerbconf['kinit']
+            if kinit_cmd:
+                connection_conf.update({'sasl.kerberos.kinit.cmd': kinit_cmd})
+
+        if 'SSL' in kerbconf['security_proto']:
+            connection_conf.update({
+                'ssl.certificate.location': sslconf['ca_cert'],
+                'ssl.ca.location': sslconf['ca_location'],
+                'ssl.key.location': sslconf['key']
+            })
+
+        return connection_conf
+
     def _create_topic(self):
 
-        self._logger.info("Creating topic: {0} with {1} parititions".format(self._topic,self._num_of_partitions))     
-
-        # Create partitions for the workers.
-        self._partitions = [ TopicPartition(self._topic,p) for p in range(int(self._num_of_partitions))]        
-
-        # create partitioner
-        self._partitioner = RoundRobinPartitioner(self._partitions)
+        self._logger.info("Creating topic: {0} with {1} parititions".format(self._topic,self._num_of_partitions))
         
         # get script path 
         zk_conf = "{0}:{1}".format(self._zk_server,self._zk_port)
@@ -67,21 +99,12 @@ class KafkaTopic(object):
         # execute create topic cmd
         Util.execute_cmd(create_topic_cmd,self._logger)
 
-    def send_message(self,message,topic_partition):
-
-        self._logger.info("Sending message to: Topic: {0} Partition:{1}".format(self._topic,topic_partition))
-        kafka_brokers = '{0}:{1}'.format(self._server,self._port)             
-        producer = KafkaProducer(bootstrap_servers=[kafka_brokers],api_version_auto_timeout_ms=3600000)
-        future = producer.send(self._topic,message,partition=topic_partition)
-        producer.flush(timeout=3600000)
-        producer.close()
     
     @classmethod
-    def SendMessage(cls,message,kafka_servers,topic,partition=0):
-        producer = KafkaProducer(bootstrap_servers=kafka_servers,api_version_auto_timeout_ms=3600000)
-        future = producer.send(topic,message,partition=partition)
-        producer.flush(timeout=3600000)
-        producer.close()  
+    def SendMessage(cls,message,topic,kafka_conf):
+        p = Producer(**kafka_conf)
+        future = p.produce(topic,message.encode('utf-8'))
+        p.flush(timeout=3600000)
 
     @property
     def Topic(self):
@@ -117,13 +140,51 @@ class KafkaConsumer(object):
         self._zk_port = zk_port
         self._id = partition
 
-    def start(self):
+    @classmethod
+    def consumer_config(cls, id, server, conf):
+        # type: (dict) -> dict
+        """Returns a configuration dictionary containing optional values"""
+
+        kerbconf = conf['kerberos']
+        sslconf = conf['ssl']
+
+        connection_conf = {
+            'bootstrap.servers': server,
+            'group.id': id,
+            'api.version.request.timeout.ms': 3600000
+        }
+
+        if kerbconf['enabled'] == 'true':
+            connection_conf.update({
+                'sasl.mechanisms': kerbconf['sasl_mech'],
+                'security.protocol': kerbconf['security_proto'],
+                'sasl.kerberos.principal': kerbconf['principal'],
+                'sasl.kerberos.keytab': kerbconf['keytab'],
+                'sasl.kerberos.min.time.before.relogin': kerbconf['min_relogin']
+            })
+
+            sn = kerbconf['service_name']
+            if sn:
+                connection_conf.update({'sasl.kerberos.service.name': sn})
+
+            kinit_cmd = kerbconf['kinit']
+            if kinit_cmd:
+                connection_conf.update({'sasl.kerberos.kinit.cmd': kinit_cmd})
+
+        if 'SSL' in kerbconf['security_proto']:
+            connection_conf.update({
+                'ssl.certificate.location': sslconf['ca_cert'],
+                'ssl.ca.location': sslconf['ca_location'],
+                'ssl.key.location': sslconf['key']
+            })
+
+        return connection_conf
+
+    def start(self, kafka_conf):
         
         kafka_brokers = '{0}:{1}'.format(self._server,self._port)
-        consumer =  KC(bootstrap_servers=[kafka_brokers],group_id=self._topic)
-        partition = [TopicPartition(self._topic,int(self._id))]
-        consumer.assign(partitions=partition)
-        consumer.poll()
+        consumer = Consumer(**kafka_conf)
+        consumer.subscribe(self._topic)
         return consumer
 
     @property

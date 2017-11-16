@@ -53,12 +53,17 @@ class Worker(object):
     def start(self):
 
         self._logger.info("Listening topic:{0}".format(self.kafka_consumer.Topic))
-        for message in self.kafka_consumer.start():
-            self._new_file(message.value)
+        consumer = self.kafka_consumer.start()
+        for message in consumer.poll():
+            if not message.error():
+                self._new_file(message.value().decode('utf-8'))
+            elif message.error().code(): print(message.error())
 
     def _new_file(self,file):
 
-        self._logger.info("-------------------------------------- New File received --------------------------------------")
+        self._logger.info(
+            "-------------------------------------- New File received --------------------------------------"
+        )
         self._logger.info("File: {0} ".format(file))        
         p = Process(target=self._process_new_file, args=(file,))
         p.start()

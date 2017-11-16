@@ -27,6 +27,7 @@ from common.file_collector import FileWatcher
 from multiprocessing import Pool
 from common.kafka_client import KafkaTopic
 
+
 class Collector(object):
 
     def __init__(self,hdfs_app_path,kafka_topic,conf_type):
@@ -47,6 +48,8 @@ class Collector(object):
         conf_file = "{0}/ingest_conf.json".format(os.path.dirname(os.path.dirname(self._script_path)))
         conf = json.loads(open(conf_file).read())
         self._conf = conf["pipelines"][conf_type]
+
+        self._kafka_conf = KafkaTopic.producer_config(self._kafka_topic, self._kafka_topic.BootstrapServers, conf)
 
         # set configuration.
         self._collector_path = self._conf['collector_path']        
@@ -80,7 +83,6 @@ class Collector(object):
             self._pool.close()            
             self._pool.join()
             SystemExit("Ingest finished...")
-    
 
     def _ingest_files_pool(self):            
        
@@ -88,14 +90,21 @@ class Collector(object):
             
             for x in range(0,self._processes):
                 file = self._watcher.GetNextFile()
-                resutl = self._pool.apply_async(ingest_file,args=(file,self._kafka_topic.Partition,self._hdfs_root_path ,self._kafka_topic.Topic,self._kafka_topic.BootstrapServers,))
-                #resutl.get() # to debug add try and catch.
-                if  not self._watcher.HasFiles: break    
+                resutl = self._pool.apply_async(ingest_file, args=(
+                    file,
+                    self._kafka_topic.Partition,
+                    self._hdfs_root_path,
+                    self._kafka_topic.Topic,
+                    self._kafka_topic.BootstrapServers,
+                    self._kafka_conf
+                ))
+                # resutl.get() # to debug add try and catch.
+                if not self._watcher.HasFiles:
+                    break
         return True
-    
 
 
-def ingest_file(file,partition,hdfs_root_path,topic,kafka_servers):
+def ingest_file(file , partition, hdfs_root_path, topic, kafka_servers, kafka_conf):
 
         logger = logging.getLogger('SPOT.INGEST.FLOW.{0}'.format(os.getpid()))
 
@@ -119,7 +128,7 @@ def ingest_file(file,partition,hdfs_root_path,topic,kafka_servers):
 
             # create event for workers to process the file.
             logger.info("Sending file to worker number: {0}".format(partition))
-            KafkaTopic.SendMessage(hdfs_file,kafka_servers,topic,partition)    
+            KafkaTopic.SendMessage(hdfs_file,kafka_servers,topic,partition, kafka_conf)
             logger.info("File {0} has been successfully sent to Kafka Topic to: {1}".format(file,topic))
 
         except Exception as err:
