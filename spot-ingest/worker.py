@@ -25,6 +25,7 @@ import sys
 from common.utils import Util
 from common.kerberos import Kerberos
 from common.kafka_client import KafkaConsumer
+import common.configurator as Config
 
 script_path = os.path.dirname(os.path.abspath(__file__))
 conf_file = "{0}/ingest_conf.json".format(script_path)
@@ -44,26 +45,26 @@ def main():
     start_worker(args.type,args.topic,args.id,args.processes)
 
 
-def start_worker(type,topic,id,processes=None):
+def start_worker(type, topic, id, processes=None):
 
     logger = Util.get_logger("SPOT.INGEST.WORKER")
 
     # validate the given configuration exists in ingest_conf.json.
-    if not type in worker_conf["pipelines"]:
-        logger.error("'{0}' type is not a valid configuration.".format(type));
+    if type not in worker_conf["pipelines"]:
+        logger.error("'{0}' type is not a valid configuration.".format(type))
         sys.exit(1)
 
     # validate the type is a valid module.
     if not Util.validate_data_source(worker_conf["pipelines"][type]["type"]):
         logger.error("The provided data source {0} is not valid".format(type));sys.exit(1)
 
-    # validate if kerberos authentication is requiered.
-    if os.getenv('KRB_AUTH'):
+    # validate if kerberos authentication is required.
+    if Config.kerberos_enabled():
         kb = Kerberos()
         kb.authenticate()
 
     # create a worker instance based on the data source type.
-    module = __import__("pipelines.{0}.worker".format(worker_conf["pipelines"][type]["type"]),fromlist=['Worker'])
+    module = __import__("pipelines.{0}.worker".format(worker_conf["pipelines"][type]["type"]), fromlist=['Worker'])
 
     # kafka server info.
     logger.info("Initializing kafka instance")
@@ -76,13 +77,14 @@ def start_worker(type,topic,id,processes=None):
     topic = topic
 
     # create kafka consumer.
-    kafka_consumer = KafkaConsumer(topic,k_server,k_port,zk_server,zk_port,id)
+    kafka_consumer = KafkaConsumer(topic, k_server, k_port, zk_server, zk_port, id)
 
     # start worker.
     db_name = worker_conf['dbname']
     app_path = worker_conf['hdfs_app_path']
-    ingest_worker = module.Worker(db_name,app_path,kafka_consumer,type,processes)
+    ingest_worker = module.Worker(db_name, app_path, kafka_consumer, type, processes)
     ingest_worker.start()
+
 
 if __name__=='__main__':
     main()
