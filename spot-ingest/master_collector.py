@@ -23,13 +23,15 @@ import json
 import sys
 from common.utils import Util
 from common.kerberos import Kerberos
-from common.kafka_client import KafkaTopic
+import common.configurator as Config
+from common.kafka_client import KafkaProducer
 import datetime 
 
 # get master configuration.
 script_path = os.path.dirname(os.path.abspath(__file__))
 conf_file = "{0}/ingest_conf.json".format(script_path)
 master_conf = json.loads(open (conf_file).read())
+
 
 def main():
 
@@ -42,6 +44,7 @@ def main():
 
     # start collector based on data source type.
     start_collector(args.type,args.workers_num,args.ingest_id)
+
 
 def start_collector(type,workers_num,id=None):
 
@@ -62,7 +65,7 @@ def start_collector(type,workers_num,id=None):
         sys.exit(1)
     
     # validate if kerberos authentication is required.
-    if os.getenv('KRB_AUTH'):
+    if Config.kerberos_enabled():
         kb = Kerberos()
         kb.authenticate()
     
@@ -75,16 +78,19 @@ def start_collector(type,workers_num,id=None):
     zk_server = master_conf["kafka"]['zookeper_server']
     zk_port = master_conf["kafka"]['zookeper_port']
          
-    topic = "SPOT-INGEST-{0}_{1}".format(type,ingest_id) if not id else id
-    kafka = KafkaTopic(topic,k_server,k_port,zk_server,zk_port,workers_num)
+    topic = "{0}".format(type,ingest_id) if not id else id
+    kafka = KafkaProducer(topic, k_server, k_port, zk_server, zk_port, workers_num)
 
     # create a collector instance based on data source type.
     logger.info("Starting {0} ingest instance".format(topic))
-    module = __import__("pipelines.{0}.collector".format(master_conf["pipelines"][type]["type"]),fromlist=['Collector'])
+    module = __import__("pipelines.{0}.collector".
+                        format(master_conf["pipelines"][type]["type"]),
+                        fromlist=['Collector'])
 
     # start collector.
-    ingest_collector = module.Collector(master_conf['hdfs_app_path'],kafka,type)
+    ingest_collector = module.Collector(master_conf['hdfs_app_path'], kafka, type)
     ingest_collector.start()
+
 
 if __name__=='__main__':
     main()
