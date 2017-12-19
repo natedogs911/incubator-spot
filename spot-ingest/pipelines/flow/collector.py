@@ -23,23 +23,24 @@ import os
 import json
 from multiprocessing import Process
 from common.utils import Util
+from common import hdfs_client as hdfs
+from common.hdfs_client import HdfsException
 from common.file_collector import FileWatcher
 from multiprocessing import Pool
-from common.kafka_client import KafkaTopic
 
 
 class Collector(object):
 
-    def __init__(self,hdfs_app_path,kafka_topic,conf_type):
+    def __init__(self, hdfs_app_path, kafkaproducer, conf_type):
         
-        self._initialize_members(hdfs_app_path,kafka_topic,conf_type)
+        self._initialize_members(hdfs_app_path, kafkaproducer, conf_type)
 
-    def _initialize_members(self,hdfs_app_path,kafka_topic,conf_type):
-  
+    def _initialize_members(self, hdfs_app_path, kafkaproducer, conf_type):
+
         # getting parameters.
         self._logger = logging.getLogger('SPOT.INGEST.FLOW')
         self._hdfs_app_path = hdfs_app_path
-        self._kafka_topic = kafka_topic
+        self._producer = kafkaproducer
 
         # get script path
         self._script_path = os.path.dirname(os.path.abspath(__file__))
@@ -48,8 +49,6 @@ class Collector(object):
         conf_file = "{0}/ingest_conf.json".format(os.path.dirname(os.path.dirname(self._script_path)))
         conf = json.loads(open(conf_file).read())
         self._conf = conf["pipelines"][conf_type]
-
-        self._kafka_conf = KafkaTopic.producer_config(self._kafka_topic.BootstrapServers, conf)
 
         # set configuration.
         self._collector_path = self._conf['collector_path']        
@@ -65,6 +64,7 @@ class Collector(object):
         self._processes = conf["collector_processes"]
         self._ingestion_interval = conf["ingestion_interval"]
         self._pool = Pool(processes=self._processes)
+        self._hdfs_client = hdfs.get_client()
 
     def start(self):
 
@@ -77,7 +77,7 @@ class Collector(object):
                 time.sleep(self._ingestion_interval)
         except KeyboardInterrupt:
             self._logger.info("Stopping FLOW collector...")  
-            Util.remove_kafka_topic(self._kafka_topic.Zookeeper,self._kafka_topic.Topic,self._logger)          
+            Util.remove_kafka_topic(self._producer.Zookeeper, self._producer.Topic, self._logger)
             self._watcher.stop()
             self._pool.terminate()
             self._pool.close()            
@@ -88,49 +88,63 @@ class Collector(object):
        
         if self._watcher.HasFiles:
             
-            for x in range(0,self._processes):
-                file = self._watcher.GetNextFile()
-                resutl = self._pool.apply_async(ingest_file, args=(
-                    file,
-                    self._kafka_topic.Partition,
-                    self._hdfs_root_path,
-                    self._kafka_topic.Topic,
-                    self._kafka_topic.BootstrapServers,
-                    self._kafka_conf
-                ))
-                # resutl.get() # to debug add try and catch.
+            for x in range(0, self._processes):
+                print('processes: {0}'.format(self._processes))
+                new_file = self._watcher.GetNextFile()
+                if self._processes <= 1:
+                    _ingest_file(self._hdfs_client, new_file, self._hdfs_root_path, self._producer, self._producer.Topic)
+                else:
+                    result = self._pool.apply_async(_ingest_file, args=(
+                        new_file,
+                        self._hdfs_root_path,
+                        self._producer.Topic,
+                        self._producer
+                    ))
+                    result.get()  # to debug add try and catch.
                 if not self._watcher.HasFiles:
                     break
         return True
 
 
-def ingest_file(file , partition, hdfs_root_path, topic, kafka_servers, kafka_conf):
+def _ingest_file(hdfs_client, new_file, hdfs_root_path, producer, topic):
 
-        logger = logging.getLogger('SPOT.INGEST.FLOW.{0}'.format(os.getpid()))
+    logger = logging.getLogger('SPOT.INGEST.FLOW.{0}'.format(os.getpid()))
+
+    try:
+
+        # get file name and date.
+        file_name_parts = new_file.split('/')
+        file_name = file_name_parts[len(file_name_parts)-1]
+        file_date = file_name.split('.')[1]
+        file_date_path = file_date[0:8]
+        file_date_hour = file_date[8:10]
+
+        # hdfs path with timestamp.
+        hdfs_path = "{0}/binary/{1}/{2}".format(hdfs_root_path, file_date_path, file_date_hour)
+        hdfs_file = "{0}/{1}".format(hdfs_path, file_name)
 
         try:
+            if len(hdfs.list_dir(hdfs_path, hdfs_client)) == 0:
+                logger.info('creating directory: ' + hdfs_path)
+                hdfs.mkdir(hdfs_path, hdfs_client)
+            logger.info('uploading file to hdfs: ' + hdfs_file)
+            result = hdfs.upload_file(new_file, hdfs_path, hdfs_client)
+            if not result:
+                logger.error('File failed to upload: ' + hdfs_file)
+                raise HdfsException
 
-            # get file name and date.
-            file_name_parts = file.split('/')
-            file_name = file_name_parts[len(file_name_parts)-1]
-            file_date = file_name.split('.')[1]
+        except HdfsException as err:
+            logger.error('Exception: ' + err.exception)
+            logger.info('Check Hdfs Connection settings and server health')
 
-            file_date_path = file_date[0:8]
-            file_date_hour = file_date[8:10]
+    except Exception as err:
+        logger.error("There was a problem, Exception: {0}".format(err))
 
-            # hdfs path with timestamp.
-            hdfs_path = "{0}/binary/{1}/{2}".format(hdfs_root_path,file_date_path,file_date_hour)
-            Util.creat_hdfs_folder(hdfs_path,logger)
-
-            # load to hdfs.
-            hdfs_file = "{0}/{1}".format(hdfs_path,file_name)
-            Util.load_to_hdfs(file,hdfs_file,logger)
-
-            # create event for workers to process the file.
-            logger.info("Sending file to worker number: {0}".format(partition))
-            KafkaTopic.SendMessage(hdfs_file,kafka_servers,topic,partition, kafka_conf)
-            logger.info("File {0} has been successfully sent to Kafka Topic to: {1}".format(file,topic))
-
-        except Exception as err:
-            logger.error("There was a problem, please check the following error message:{0}".format(err.message))
-            logger.error("Exception: {0}".format(err))
+        # create event for workers to process the file.
+        # logger.info("Sending file to worker number: {0}".format(partition))
+    try:
+        producer.SendMessage(hdfs_file, topic)
+        logger.info("File {0} has been successfully sent to Kafka Topic to: {1}".format(new_file,topic))
+    except Exception as err:
+        logger.info("File {0} failed to be sent to Kafka Topic to: {1}".format(new_file,topic))
+        logger.error("Error: {0}".format(err))
