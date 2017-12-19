@@ -18,23 +18,23 @@
 #
 
 import logging
-import os
+import os, sys
 from common.utils import Util
 from confluent_kafka import Producer
 from confluent_kafka import Consumer
-from kafka.common import TopicPartition
+import common.configurator as Config
 
-class KafkaTopic(object):
 
+class KafkaProducer(object):
 
     def __init__(self,topic,server,port,zk_server,zk_port,partitions):
 
-        self._initialize_members(topic,server,port,zk_server,zk_port,partitions)
+        self._initialize_members(topic, server, port, zk_server, zk_port, partitions)
 
-    def _initialize_members(self,topic,server,port,zk_server,zk_port,partitions):
+    def _initialize_members(self, topic, server, port, zk_server, zk_port, partitions):
 
         # get logger isinstance
-        self._logger = logging.getLogger("SPOT.INGEST.KAFKA")
+        self._logger = logging.getLogger("SPOT.INGEST.KafkaProducer")
 
         # kafka requirements
         self._server = server
@@ -45,45 +45,54 @@ class KafkaTopic(object):
         self._num_of_partitions = partitions
         self._partitions = []
         self._partitioner = None
+        self._kafka_brokers = '{0}:{1}'.format(self._server,self._port)
 
         # create topic with partitions
         self._create_topic()
 
-    @classmethod
-    def producer_config(cls, server, conf):
-        # type: (dict) -> dict
-        """Returns a configuration dictionary containing optional values"""
+        self._kafka_conf = self._producer_config(self._kafka_brokers)
 
-        kerbconf = conf['kerberos']
-        sslconf = conf['ssl']
+        self._p = Producer(**self._kafka_conf)
+
+    def _producer_config(self, server):
+        # type: (str) -> dict
+        """Returns a configuration dictionary containing optional values"""
 
         connection_conf = {
             'bootstrap.servers': server,
-            'api.version.request.timeout.ms': 3600000
         }
 
-        if kerbconf['enabled'] == 'true':
+        if os.environ.get('KAFKA_DEBUG'):
+            connection_conf.update({'debug': 'all'})
+
+        if Config.kerberos_enabled():
+            self._logger.info('Kerberos enabled')
+            principal, keytab, sasl_mech, security_proto = Config.kerberos()
             connection_conf.update({
-                'sasl.mechanisms': kerbconf['sasl_mech'],
-                'security.protocol': kerbconf['security_proto'],
-                'sasl.kerberos.principal': kerbconf['principal'],
-                'sasl.kerberos.keytab': kerbconf['keytab'],
-                'sasl.kerberos.min.time.before.relogin': kerbconf['min_relogin']
+                'sasl.mechanisms': sasl_mech,
+                'security.protocol': security_proto,
+                'sasl.kerberos.principal': principal,
+                'sasl.kerberos.keytab': keytab,
+                'sasl.kerberos.min.time.before.relogin': 6000
             })
 
-            sn = kerbconf['service_name']
+            sn = os.environ.get('KAFKA_SERVICE_NAME')
             if sn:
+                self._logger.info('Setting Kerberos service name: ' + sn)
                 connection_conf.update({'sasl.kerberos.service.name': sn})
 
-            kinit_cmd = kerbconf['kinit']
+            kinit_cmd = os.environ.get('KAFKA_KINIT')
             if kinit_cmd:
+                self._logger.info('using kinit command: ' + kinit_cmd)
                 connection_conf.update({'sasl.kerberos.kinit.cmd': kinit_cmd})
 
-        if 'SSL' in kerbconf['security_proto']:
+        if Config.ssl_enabled():
+            self._logger.info('Using SSL connection settings')
+            ssl_verify, ca_location, cert, key = Config.ssl()
             connection_conf.update({
-                'ssl.ca.location': sslconf['ca_location'],
-                'ssl.certificate.location': sslconf['cert'],
-                'ssl.key.location': sslconf['key']
+                'ssl.certificate.location': cert,
+                'ssl.ca.location': ca_location,
+                'ssl.key.location': key
             })
 
         return connection_conf
@@ -99,12 +108,20 @@ class KafkaTopic(object):
         # execute create topic cmd
         Util.execute_cmd(create_topic_cmd,self._logger)
 
-    
-    @classmethod
-    def SendMessage(cls,message,topic,kafka_conf):
-        p = Producer(**kafka_conf)
-        future = p.produce(topic,message.encode('utf-8'))
+    def SendMessage(self, message, topic):
+        # p = Producer(**self._kafka_conf)
+        p = self._p
+        p.produce(topic, message.encode('utf-8'), callback=self._delivery_callback)
+        p.poll(0)
         p.flush(timeout=3600000)
+
+    @classmethod
+    def _delivery_callback(cls, err, msg):
+        if err:
+            sys.stderr.write('%% Message failed delivery: %s\n' % err)
+        else:
+            sys.stderr.write('%% Message delivered to %s [%d]\n' %
+                             (msg.topic(), msg.partition()))
 
     @property
     def Topic(self):
@@ -127,11 +144,13 @@ class KafkaTopic(object):
 
 class KafkaConsumer(object):
     
-    def __init__(self,topic,server,port,zk_server,zk_port,partition):
+    def __init__(self, topic, server, port, zk_server, zk_port, partition):
 
-        self._initialize_members(topic,server,port,zk_server,zk_port,partition)
+        self._initialize_members(topic, server, port, zk_server, zk_port, partition)
 
-    def _initialize_members(self,topic,server,port,zk_server,zk_port,partition):
+    def _initialize_members(self, topic, server, port, zk_server, zk_port, partition):
+
+        self._logger = logging.getLogger("SPOT.INGEST.KafkaConsumer")
 
         self._topic = topic
         self._server = server
@@ -139,52 +158,58 @@ class KafkaConsumer(object):
         self._zk_server = zk_server
         self._zk_port = zk_port
         self._id = partition
+        self._kafka_brokers = '{0}:{1}'.format(self._server,self._port)
+        self._kafka_conf = self._consumer_config(self._id, self._kafka_brokers)
 
-    @classmethod
-    def consumer_config(cls, id, server, conf):
+    def _consumer_config(self, id, server):
         # type: (dict) -> dict
         """Returns a configuration dictionary containing optional values"""
-
-        kerbconf = conf['kerberos']
-        sslconf = conf['ssl']
 
         connection_conf = {
             'bootstrap.servers': server,
             'group.id': id,
-            'api.version.request.timeout.ms': 3600000
         }
 
-        if kerbconf['enabled'] == 'true':
+        if Config.kerberos_enabled():
+            self._logger.info('Kerberos enabled')
+            principal, keytab, sasl_mech, security_proto = Config.kerberos()
             connection_conf.update({
-                'sasl.mechanisms': kerbconf['sasl_mech'],
-                'security.protocol': kerbconf['security_proto'],
-                'sasl.kerberos.principal': kerbconf['principal'],
-                'sasl.kerberos.keytab': kerbconf['keytab'],
-                'sasl.kerberos.min.time.before.relogin': kerbconf['min_relogin']
+                'sasl.mechanisms': sasl_mech,
+                'security.protocol': security_proto,
+                'sasl.kerberos.principal': principal,
+                'sasl.kerberos.keytab': keytab,
+                'sasl.kerberos.min.time.before.relogin': 6000,
+                'default.topic.config': {
+                    'auto.commit.enable': 'true',
+                    'auto.commit.interval.ms': '60000',
+                    'auto.offset.reset': 'smallest'}
             })
 
-            sn = kerbconf['service_name']
+            sn = os.environ.get('KAFKA_SERVICE_NAME')
             if sn:
+                self._logger.info('Setting Kerberos service name: ' + sn)
                 connection_conf.update({'sasl.kerberos.service.name': sn})
 
-            kinit_cmd = kerbconf['kinit']
+            kinit_cmd = os.environ.get('KAFKA_KINIT')
             if kinit_cmd:
+                self._logger.info('using kinit command: ' + kinit_cmd)
                 connection_conf.update({'sasl.kerberos.kinit.cmd': kinit_cmd})
 
-        if 'SSL' in kerbconf['security_proto']:
+        if Config.ssl_enabled():
+            self._logger.info('Using SSL connection settings')
+            ssl_verify, ca_location, cert, key = Config.ssl()
             connection_conf.update({
-                'ssl.certificate.location': sslconf['ca_cert'],
-                'ssl.ca.location': sslconf['ca_location'],
-                'ssl.key.location': sslconf['key']
+                'ssl.certificate.location': cert,
+                'ssl.ca.location': ca_location,
+                'ssl.key.location': key
             })
 
         return connection_conf
 
-    def start(self, kafka_conf):
-        
-        kafka_brokers = '{0}:{1}'.format(self._server,self._port)
-        consumer = Consumer(**kafka_conf)
-        consumer.subscribe(self._topic)
+    def start(self):
+
+        consumer = Consumer(**self._kafka_conf)
+        consumer.subscribe([self._topic])
         return consumer
 
     @property
