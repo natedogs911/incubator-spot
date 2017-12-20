@@ -18,16 +18,17 @@
 #
 
 import logging
-import os, sys
+import os
+import sys
 from common.utils import Util
 from confluent_kafka import Producer
 from confluent_kafka import Consumer
-import common.configurator as Config
+import common.configurator as config
 
 
 class KafkaProducer(object):
 
-    def __init__(self,topic,server,port,zk_server,zk_port,partitions):
+    def __init__(self, topic, server, port, zk_server, zk_port, partitions):
 
         self._initialize_members(topic, server, port, zk_server, zk_port, partitions)
 
@@ -45,7 +46,7 @@ class KafkaProducer(object):
         self._num_of_partitions = partitions
         self._partitions = []
         self._partitioner = None
-        self._kafka_brokers = '{0}:{1}'.format(self._server,self._port)
+        self._kafka_brokers = '{0}:{1}'.format(self._server, self._port)
 
         # create topic with partitions
         self._create_topic()
@@ -65,9 +66,9 @@ class KafkaProducer(object):
         if os.environ.get('KAFKA_DEBUG'):
             connection_conf.update({'debug': 'all'})
 
-        if Config.kerberos_enabled():
+        if config.kerberos_enabled():
             self._logger.info('Kerberos enabled')
-            principal, keytab, sasl_mech, security_proto = Config.kerberos()
+            principal, keytab, sasl_mech, security_proto = config.kerberos()
             connection_conf.update({
                 'sasl.mechanisms': sasl_mech,
                 'security.protocol': security_proto,
@@ -85,10 +86,16 @@ class KafkaProducer(object):
             if kinit_cmd:
                 self._logger.info('using kinit command: ' + kinit_cmd)
                 connection_conf.update({'sasl.kerberos.kinit.cmd': kinit_cmd})
+            else:
+                # Using -S %{sasl.kerberos.service.name}/%{broker.name} causes the ticket cache to refresh
+                # resulting in authentication errors for other services
+                connection_conf.update({
+                    'sasl.kerberos.kinit.cmd': 'kinit -k -t "%{sasl.kerberos.keytab}" %{sasl.kerberos.principal}'
+                })
 
-        if Config.ssl_enabled():
+        if config.ssl_enabled():
             self._logger.info('Using SSL connection settings')
-            ssl_verify, ca_location, cert, key = Config.ssl()
+            ssl_verify, ca_location, cert, key = config.ssl()
             connection_conf.update({
                 'ssl.certificate.location': cert,
                 'ssl.ca.location': ca_location,
@@ -99,17 +106,21 @@ class KafkaProducer(object):
 
     def _create_topic(self):
 
-        self._logger.info("Creating topic: {0} with {1} parititions".format(self._topic,self._num_of_partitions))
+        self._logger.info("Creating topic: {0} with {1} parititions".format(self._topic, self._num_of_partitions))
         
         # get script path 
-        zk_conf = "{0}:{1}".format(self._zk_server,self._zk_port)
-        create_topic_cmd = "{0}/kafka_topic.sh create {1} {2} {3}".format(os.path.dirname(os.path.abspath(__file__)),self._topic,zk_conf,self._num_of_partitions)
+        zk_conf = "{0}:{1}".format(self._zk_server, self._zk_port)
+        create_topic_cmd = "{0}/kafka_topic.sh create {1} {2} {3}".format(
+            os.path.dirname(os.path.abspath(__file__)),
+            self._topic,
+            zk_conf,
+            self._num_of_partitions
+        )
 
         # execute create topic cmd
-        Util.execute_cmd(create_topic_cmd,self._logger)
+        Util.execute_cmd(create_topic_cmd, self._logger)
 
     def SendMessage(self, message, topic):
-        # p = Producer(**self._kafka_conf)
         p = self._p
         p.produce(topic, message.encode('utf-8'), callback=self._delivery_callback)
         p.poll(0)
@@ -133,12 +144,12 @@ class KafkaProducer(object):
 
     @property
     def Zookeeper(self):
-        zk = "{0}:{1}".format(self._zk_server,self._zk_port)
+        zk = "{0}:{1}".format(self._zk_server, self._zk_port)
         return zk
 
     @property
     def BootstrapServers(self):
-        servers = "{0}:{1}".format(self._server,self._port) 
+        servers = "{0}:{1}".format(self._server, self._port)
         return servers
 
 
@@ -158,21 +169,21 @@ class KafkaConsumer(object):
         self._zk_server = zk_server
         self._zk_port = zk_port
         self._id = partition
-        self._kafka_brokers = '{0}:{1}'.format(self._server,self._port)
+        self._kafka_brokers = '{0}:{1}'.format(self._server, self._port)
         self._kafka_conf = self._consumer_config(self._id, self._kafka_brokers)
 
-    def _consumer_config(self, id, server):
+    def _consumer_config(self, groupid, server):
         # type: (dict) -> dict
         """Returns a configuration dictionary containing optional values"""
 
         connection_conf = {
             'bootstrap.servers': server,
-            'group.id': id,
+            'group.id': groupid,
         }
 
-        if Config.kerberos_enabled():
+        if config.kerberos_enabled():
             self._logger.info('Kerberos enabled')
-            principal, keytab, sasl_mech, security_proto = Config.kerberos()
+            principal, keytab, sasl_mech, security_proto = config.kerberos()
             connection_conf.update({
                 'sasl.mechanisms': sasl_mech,
                 'security.protocol': security_proto,
@@ -194,10 +205,16 @@ class KafkaConsumer(object):
             if kinit_cmd:
                 self._logger.info('using kinit command: ' + kinit_cmd)
                 connection_conf.update({'sasl.kerberos.kinit.cmd': kinit_cmd})
+            else:
+                # Using -S %{sasl.kerberos.service.name}/%{broker.name} causes the ticket cache to refresh
+                # resulting in authentication errors for other services
+                connection_conf.update({
+                    'sasl.kerberos.kinit.cmd': 'kinit -k -t "%{sasl.kerberos.keytab}" %{sasl.kerberos.principal}'
+                })
 
-        if Config.ssl_enabled():
+        if config.ssl_enabled():
             self._logger.info('Using SSL connection settings')
-            ssl_verify, ca_location, cert, key = Config.ssl()
+            ssl_verify, ca_location, cert, key = config.ssl()
             connection_conf.update({
                 'ssl.certificate.location': cert,
                 'ssl.ca.location': ca_location,
@@ -218,6 +235,4 @@ class KafkaConsumer(object):
 
     @property
     def ZookeperServer(self):
-        return "{0}:{1}".format(self._zk_server,self._zk_port)
-
-    
+        return "{0}:{1}".format(self._zk_server, self._zk_port)
