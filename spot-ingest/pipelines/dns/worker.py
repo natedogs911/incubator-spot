@@ -21,10 +21,16 @@ import logging
 import datetime
 import subprocess
 import json
+import sys
 import os
 from multiprocessing import Process
 from common.utils import Util
+<<<<<<< HEAD
 from impala.dbapi import connect
+=======
+from common import hdfs_client as hdfs
+from confluent_kafka import KafkaError, KafkaException
+>>>>>>> updated worker with hdfs calls, kafka update
 
 
 class Worker(object):
@@ -45,7 +51,8 @@ class Worker(object):
         self._script_path = os.path.dirname(os.path.abspath(__file__))
         conf_file = "{0}/ingest_conf.json".format(os.path.dirname(os.path.dirname(self._script_path)))
         conf = json.loads(open(conf_file).read())
-        self._conf = conf["pipelines"][conf_type] 
+        self._conf = conf["pipelines"][conf_type]
+        self._id = "spot-{0}-worker".format(conf_type)
 
         self._process_opt = self._conf['process_opt']
         self._local_staging = self._conf['local_staging']
@@ -65,8 +72,25 @@ class Worker(object):
     def start(self):
 
         self._logger.info("Listening topic:{0}".format(self.kafka_consumer.Topic))
-        for message in self.kafka_consumer.start():
-            self._new_file(message.value)
+        consumer = self.kafka_consumer.start()
+
+        try:
+            while True:
+                message = consumer.poll(timeout=1.0)
+                if message is None:
+                    continue
+                if not message.error():
+                    self._new_file(message.value().decode('utf-8'))
+                elif message.error():
+                    if message.error().code() == KafkaError._PARTITION_EOF:
+                        continue
+                    elif message.error:
+                        raise KafkaException(message.error())
+
+        except KeyboardInterrupt:
+            sys.stderr.write('%% Aborted by user\n')
+
+        consumer.close()
 
     def _new_file(self, file):
 
@@ -78,13 +102,16 @@ class Worker(object):
         p.start() 
         p.join()
 
-    def _process_new_file(self, file):
+    def _process_new_file(self, nf):
 
 
         # get file from hdfs
-        get_file_cmd = "hadoop fs -get {0} {1}.".format(file, self._local_staging)
-        self._logger.info("Getting file from hdfs: {0}".format(get_file_cmd))
-        Util.execute_cmd(get_file_cmd, self._logger)
+        self._logger.info("Getting file from hdfs: {0}".format(nf))
+        if hdfs.file_exists(nf):
+            hdfs.download_file(nf, self._local_staging)
+        else:
+            self._logger.info("file: {0} not found".format(nf))
+            # TODO: error handling
 
         # get file name and date
         file_name_parts = file.split('/')
@@ -105,14 +132,13 @@ class Worker(object):
         hdfs_path = "{0}/dns".format(self._hdfs_app_path)
         staging_timestamp = datetime.datetime.now().strftime('%M%S%f')[:-4]
         hdfs_staging_path =  "{0}/stage/{1}".format(hdfs_path,staging_timestamp)
-        create_staging_cmd = "hadoop fs -mkdir -p {0}".format(hdfs_staging_path)
-        self._logger.info("Creating staging: {0}".format(create_staging_cmd))
-        Util.execute_cmd(create_staging_cmd, self._logger)
+        self._logger.info("Creating staging: {0}".format(hdfs_staging_path))
+        hdfs.mkdir(hdfs_staging_path)
 
         # move to stage.
-        mv_to_staging ="hadoop fs -moveFromLocal {0}{1}.csv {2}/.".format(self._local_staging, file_name, hdfs_staging_path)
-        self._logger.info("Moving data to staging: {0}".format(mv_to_staging))
-        Util.execute_cmd(mv_to_staging, self._logger)
+        local_file = "{0}{1}.csv".format(self._local_staging, file_name)
+        self._logger.info("Moving data to staging: {0}".format(hdfs_staging_path))
+        hdfs.upload_file(hdfs_staging_path, local_file)
 
         #load to avro
         drop_table = 'DROP TABLE IF EXISTS {0}.dns_tmp'.format(self._db_name)
@@ -172,9 +198,8 @@ class Worker(object):
         self._cursor.execute(insert_into_table)
 
         # remove from hdfs staging
-        rm_hdfs_staging_cmd = "hadoop fs -rm -R -skipTrash {0}".format(hdfs_staging_path)
-        self._logger.info("Removing staging path: {0}".format(rm_hdfs_staging_cmd))
-        Util.execute_cmd(rm_hdfs_staging_cmd, self._logger)
+        self._logger.info("Removing staging path: {0}".format(hdfs_staging_path))
+        hdfs.delete_folder(hdfs_staging_path)
 
         # remove from local staging.
         rm_local_staging = "rm {0}{1}".format(self._local_staging,file_name)
