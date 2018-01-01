@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-from hdfs import InsecureClient
 from hdfs.util import HdfsError
 from hdfs import Client
 from hdfs.ext.kerberos import KerberosClient
