@@ -24,6 +24,7 @@ class Engine(object):
         self._daemon_node = conf['impala_daemon']
         self._db = db
         self._pipeline = pipeline
+        # TODO check kerberos compatibility
         impala_cmd = "impala-shell -i {0} --quiet -q 'INVALIDATE METADATA {1}.{2}'".format(self._daemon_node,self._db, self._pipeline)
         check_output(impala_cmd,shell=True)
     
