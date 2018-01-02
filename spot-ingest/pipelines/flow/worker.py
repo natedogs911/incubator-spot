@@ -23,10 +23,9 @@ import datetime
 import logging
 import os
 import json
-from impala.dbapi import connect
 from multiprocessing import Process
 from common.utils import Util
-import common.configurator as Config
+from common import hive_engine
 from common import hdfs_client as hdfs
 from confluent_kafka import KafkaError, KafkaException
 
@@ -55,16 +54,7 @@ class Worker(object):
         self._local_staging = self._conf['local_staging']
         self.kafka_consumer = kafka_consumer
 
-        self._hs2_host = os.getenv("HS2_HOST")
-        self._hs2_port = os.getenv("HS2_PORT")
-        self._conn = connect(
-            host=self._hs2_host,
-            port=int(self._hs2_port),
-            auth_mechanism='GSSAPI',
-            kerberos_service_name='hive',
-            database=db_name
-        )
-        self._cursor = self._conn.cursor()
+        self._cursor = hive_engine.create_connection()
 
     def start(self):
 
@@ -88,15 +78,14 @@ class Worker(object):
 
         consumer.close()
 
-    def _new_file(self, file):
-
+    def _new_file(self, nf):
 
         self._logger.info(
             "-------------------------------------- New File received --------------------------------------"
         )
-        self._logger.info("File: {0} ".format(file))
+        self._logger.info("File: {0} ".format(nf))
 
-        p = Process(target=self._process_new_file, args=file)
+        p = Process(target=self._process_new_file, args=nf)
         p.start()
         p.join()
         
@@ -128,7 +117,7 @@ class Worker(object):
         # create hdfs staging.
         hdfs_path = "{0}/flow".format(self._hdfs_app_path)
         staging_timestamp = datetime.datetime.now().strftime('%M%S%f')[:-4]
-        hdfs_staging_path =  "{0}/stage/{1}".format(hdfs_path,staging_timestamp)
+        hdfs_staging_path = "{0}/stage/{1}".format(hdfs_path,staging_timestamp)
         self._logger.info("Creating staging: {0}".format(hdfs_staging_path))
         hdfs.mkdir(hdfs_staging_path)
 

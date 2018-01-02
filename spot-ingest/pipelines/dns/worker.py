@@ -25,12 +25,9 @@ import sys
 import os
 from multiprocessing import Process
 from common.utils import Util
-<<<<<<< HEAD
-from impala.dbapi import connect
-=======
+from common import hive_engine
 from common import hdfs_client as hdfs
 from confluent_kafka import KafkaError, KafkaException
->>>>>>> updated worker with hdfs calls, kafka update
 
 
 class Worker(object):
@@ -58,16 +55,7 @@ class Worker(object):
         self._local_staging = self._conf['local_staging']
         self.kafka_consumer = kafka_consumer
 
-        self._hs2_host = os.getenv("HS2_HOST")
-        self._hs2_port = os.getenv("HS2_PORT")
-        self._conn = connect(
-            host=self._hs2_host,
-            port=int(self._hs2_port),
-            auth_mechanism='GSSAPI',
-            kerberos_service_name='hive',
-            database=db_name
-        )
-        self._cursor = self._conn.cursor()
+        self._cursor = hive_engine.create_connection()
 
     def start(self):
 
