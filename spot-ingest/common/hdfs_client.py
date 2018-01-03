@@ -143,7 +143,7 @@ def download_file(hdfs_path, local_path, overwrite=False, client=None):
 
 
 def mkdir(hdfs_path, client=None):
-    if client is not None:
+    if not client:
         client = get_client()
 
     try:
@@ -223,7 +223,7 @@ def file_exists(hdfs_path, file_name, client=None):
     if not client:
         client = get_client()
 
-    files = list_dir(client, hdfs_path)
+    files = list_dir(hdfs_path, client)
     if str(file_name) in files:
         return True
     else:

@@ -80,13 +80,13 @@ class Worker(object):
 
         consumer.close()
 
-    def _new_file(self, file):
+    def _new_file(self, nf):
 
         self._logger.info(
             "-------------------------------------- New File received --------------------------------------"
         )
         self._logger.info("File: {0} ".format(file))        
-        p = Process(target=self._process_new_file, args=(file,))
+        p = Process(target=self._process_new_file, args=nf)
         p.start() 
         p.join()
 

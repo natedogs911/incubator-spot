@@ -85,32 +85,33 @@ class Worker(object):
         )
         self._logger.info("File: {0} ".format(nf))
 
-        p = Process(target=self._process_new_file, args=nf)
+        p = Process(target=self._process_new_file, args=(nf,))
         p.start()
         p.join()
         
     def _process_new_file(self, nf):
 
-        # get file from hdfs
-        self._logger.info("Getting file from hdfs: {0}".format(nf))
-        if hdfs.file_exists(nf):
-            hdfs.download_file(nf, self._local_staging)
-        else:
-            self._logger.info("file: {0} not found".format(nf))
-            # TODO: error handling
-
         # get file name and date
         file_name_parts = nf.split('/')
         file_name = file_name_parts[len(file_name_parts)-1]
-
+        nf_path = nf.rstrip(file_name)
         flow_date = file_name.split('.')[1]
         flow_year = flow_date[0:4]
         flow_month = flow_date[4:6]
         flow_day = flow_date[6:8]
         flow_hour = flow_date[8:10]
 
+        # get file from hdfs
+        if hdfs.file_exists(nf_path, nf):
+            self._logger.info("Getting file from hdfs: {0}".format(nf))
+            hdfs.download_file(nf, self._local_staging)
+        else:
+            self._logger.info("file: {0} not found".format(nf))
+            # TODO: error handling
+
         # build process cmd.
-        process_cmd = "nfdump -o csv -r {0}{1} {2} > {0}{1}.csv".format(self._local_staging,file_name,self._process_opt)
+        sf = "{0}{1}.csv".format(self._local_staging,file_name)
+        process_cmd = "nfdump -o csv -r {0}{1} {2} > {3}".format(self._local_staging, file_name, self._process_opt, sf)
         self._logger.info("Processing file: {0}".format(process_cmd))
         Util.execute_cmd(process_cmd,self._logger)
 
@@ -221,6 +222,10 @@ class Worker(object):
 
         # remove from local staging.
         rm_local_staging = "rm {0}{1}".format(self._local_staging,file_name)
+        self._logger.info("Removing files from local staging: {0}".format(rm_local_staging))
+        Util.execute_cmd(rm_local_staging,self._logger)
+
+        rm_local_staging = "rm {0}".format(sf)
         self._logger.info("Removing files from local staging: {0}".format(rm_local_staging))
         Util.execute_cmd(rm_local_staging,self._logger)
 

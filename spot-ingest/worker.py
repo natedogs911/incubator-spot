@@ -30,6 +30,7 @@ SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
 CONF_FILE = "{0}/ingest_conf.json".format(SCRIPT_PATH)
 WORKER_CONF = json.loads(open(CONF_FILE).read())
 
+
 def main():
 
     # input parameters
@@ -66,7 +67,8 @@ def start_worker(type, topic, id, processes=None):
 
     # validate if kerberos authentication is required.
     if Config.kerberos_enabled():
-        kb = Kerberos()
+        principal, keytab, sasl_mech, security_proto = Config.kerberos()
+        kb = Kerberos('kinit',keytab,)
         kb.authenticate()
 
     # create a worker instance based on the data source type.

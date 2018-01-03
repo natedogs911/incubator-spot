@@ -36,9 +36,12 @@ def create_connection():
 
     if config.ssl_enabled():
         ssl_verify, ca_location, cert, key = config.ssl()
-        conf.update({'ca_cert': cert,
-                     'use_ssl': ssl_verify
-                     })
+        if ssl_verify.lower() == 'false':
+            conf.update({'use_ssl': ssl_verify})
+        else:
+            conf.update({'ca_cert': cert,
+                         'use_ssl': ssl_verify
+                         })
 
     db = config.db()
     conn = connect(host=host, port=int(port), database=db, **conf)
