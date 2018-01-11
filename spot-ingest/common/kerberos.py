@@ -20,24 +20,28 @@
 
 import subprocess
 import sys
-
+import os
+import common.configurator as config
 
 class Kerberos(object):
-    def __init__(self, kinit, keytab, user, kinitopts, **kwargs):
+    def __init__(self):
 
-        self._kinit = kinit
-        self._kinitopts = kinitopts
+        principal, keytab, sasl_mech, security_proto = config.kerberos()
 
-        self._keytab = keytab
-        self._krb_user = user
+        if os.getenv('KINITPATH'):
+            self._kinit = os.getenv('KINITPATH')
+        else:
+            self._kinit = "kinit"
+
+        self._kinitopts = os.getenv('KINITOPTS')
+        self._keytab = "-kt " + keytab
+        self._krb_user = principal
 
         if self._kinit == None or self._kinitopts == None or self._keytab == None or self._krb_user == None:
             print("Please verify kerberos configuration, some environment variables are missing.")
             sys.exit(1)
 
         self._kinit_args = [self._kinit, self._kinitopts, self._keytab, self._krb_user]
-
-        # self.authenticate(self._kinit_args)
 
     def authenticate(self):
 
