@@ -89,7 +89,9 @@ def get_client(user=None):
 
     logger = logging.getLogger('SPOT.INGEST.HDFS.get_client')
     hdfs_nm, hdfs_port, hdfs_user = Config.hdfs()
-    conf = {'url': '{0}:{1}'.format(hdfs_nm, hdfs_port)}
+    conf = {'url': '{0}:{1}'.format(hdfs_nm, hdfs_port),
+            'mutual_auth': 'OPTIONAL'
+            }
 
     if Config.ssl_enabled():
         ssl_verify, ca_location, cert, key = Config.ssl()
@@ -98,6 +100,7 @@ def get_client(user=None):
             conf.update({'cert': cert})
 
     if Config.kerberos_enabled():
+        # TODO: handle other conditions
         krb_conf = {'mutual_auth': 'OPTIONAL'}
         conf.update(krb_conf)
 

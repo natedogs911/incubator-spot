@@ -85,7 +85,7 @@ class Worker(object):
         )
         self._logger.info("File: {0} ".format(nf))
 
-        p = Process(target=self._process_new_file, args=(nf,))
+        p = Process(target=self._process_new_file, args=(nf, ))
         p.start()
         p.join()
         
