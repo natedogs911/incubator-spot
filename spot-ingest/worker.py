@@ -67,8 +67,7 @@ def start_worker(type, topic, id, processes=None):
 
     # validate if kerberos authentication is required.
     if Config.kerberos_enabled():
-        principal, keytab, sasl_mech, security_proto = Config.kerberos()
-        kb = Kerberos('kinit',keytab,)
+        kb = Kerberos()
         kb.authenticate()
 
     # create a worker instance based on the data source type.
