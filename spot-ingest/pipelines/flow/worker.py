@@ -54,7 +54,8 @@ class Worker(object):
         self._local_staging = self._conf['local_staging']
         self.kafka_consumer = kafka_consumer
 
-        self._cursor = hive_engine.create_connection()
+        # self._cursor = hive_engine.create_connection()
+        self._cursor = hive_engine
 
     def start(self):
 
@@ -102,7 +103,7 @@ class Worker(object):
         flow_hour = flow_date[8:10]
 
         # get file from hdfs
-        if hdfs.file_exists(nf_path, nf):
+        if hdfs.file_exists(nf_path, file_name):
             self._logger.info("Getting file from hdfs: {0}".format(nf))
             hdfs.download_file(nf, self._local_staging)
         else:
@@ -130,7 +131,7 @@ class Worker(object):
         # load with impyla
         drop_table = "DROP TABLE IF EXISTS {0}.flow_tmp".format(self._db_name)
         self._logger.info( "Dropping temp table: {0}".format(drop_table))
-        self._cursor.execute(drop_table)
+        self._cursor.execute_query(drop_table)
 
         create_external = ("\n"
                            "CREATE EXTERNAL TABLE {0}.flow_tmp (\n"
@@ -201,7 +202,7 @@ class Worker(object):
                            "}}')\n"
                            ).format(self._db_name, hdfs_staging_path)
         self._logger.info( "Creating external table: {0}".format(create_external))
-        self._cursor.execute(create_external)
+        self._cursor.execute_query(create_external)
 
         insert_into_table = """
         INSERT INTO TABLE {0}.flow
@@ -214,7 +215,7 @@ class Worker(object):
         self._logger.info( "Loading data to {0}: {1}"
                            .format(self._db_name, insert_into_table)
                            )
-        self._cursor.execute(insert_into_table)
+        self._cursor.execute_query(insert_into_table)
 
         # remove from hdfs staging
         self._logger.info("Removing staging path: {0}".format(hdfs_staging_path))

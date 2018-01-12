@@ -131,11 +131,11 @@ def _ingest_file(hdfs_client, new_file, hdfs_root_path, producer, topic):
         hdfs_file = "{0}/{1}".format(hdfs_path, file_name)
 
         try:
-            if len(hdfs.list_dir(hdfs_path, hdfs_client)) == 0:
+            if len(hdfs.list_dir(hdfs_path)) == 0:
                 logger.info('creating directory: ' + hdfs_path)
-                hdfs.mkdir(hdfs_path, hdfs_client)
+                hdfs.mkdir(hdfs_path)
             logger.info('uploading file to hdfs: ' + hdfs_file)
-            result = hdfs.upload_file(new_file, hdfs_path, hdfs_client)
+            result = hdfs.upload_file(hdfs_path, new_file)
             if not result:
                 logger.error('File failed to upload: ' + hdfs_file)
                 raise HdfsException
@@ -151,7 +151,7 @@ def _ingest_file(hdfs_client, new_file, hdfs_root_path, producer, topic):
         # logger.info("Sending file to worker number: {0}".format(partition))
     try:
         producer.SendMessage(hdfs_file, topic)
-        logger.info("File {0} has been successfully sent to Kafka Topic to: {1}".format(new_file,topic))
+        logger.info("File {0} has been successfully sent to Kafka Topic to: {1}".format(hdfs_file, topic))
     except Exception as err:
-        logger.info("File {0} failed to be sent to Kafka Topic to: {1}".format(new_file,topic))
+        logger.info("File {0} failed to be sent to Kafka Topic to: {1}".format(hdfs_file, topic))
         logger.error("Error: {0}".format(err))
