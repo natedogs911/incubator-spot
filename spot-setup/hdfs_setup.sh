@@ -105,6 +105,9 @@ fi
 case ${DBENGINE} in
     impala)
         db_shell="impala-shell -i ${IMPALA_DEM}"
+        if [[ ${KERBEROS} == "true" ]]; then
+            db_shell="${db_shell} -k"
+        fi
         db_query="${db_shell} -q"
         db_script="${db_shell} --var=huser=${HUSER} --var=dbname=${DBNAME} -c -f"
         ;;
