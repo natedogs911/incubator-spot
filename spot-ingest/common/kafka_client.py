@@ -90,7 +90,7 @@ class KafkaProducer(object):
                 # Using -S %{sasl.kerberos.service.name}/%{broker.name} causes the ticket cache to refresh
                 # resulting in authentication errors for other services
                 connection_conf.update({
-                    'sasl.kerberos.kinit.cmd': 'kinit -k -t "%{sasl.kerberos.keytab}" %{sasl.kerberos.principal}'
+                    'sasl.kerberos.kinit.cmd': 'kinit -S "%{sasl.kerberos.service.name}/%{broker.name}" -k -t "%{sasl.kerberos.keytab}" %{sasl.kerberos.principal}'
                 })
 
         if config.ssl_enabled():
