@@ -93,7 +93,7 @@ class Collector(object):
                 self._logger.info('processes: {0}'.format(self._processes))
                 new_file = self._watcher.GetNextFile()
                 if self._processes <= 1:
-                    _ingest_file(self._hdfs_client,
+                    _ingest_file(
                                  new_file,
                                  self._hdfs_root_path,
                                  self._producer,
@@ -101,7 +101,6 @@ class Collector(object):
                                  )
                 else:
                     result = self._pool.apply_async(_ingest_file, args=(
-                        self._hdfs_client,
                         new_file,
                         self._hdfs_root_path,
                         self._producer,
@@ -113,7 +112,7 @@ class Collector(object):
         return True
 
 
-def _ingest_file(hdfs_client, new_file, hdfs_root_path, producer, topic):
+def _ingest_file(new_file, hdfs_root_path, producer, topic):
 
     logger = logging.getLogger('SPOT.INGEST.FLOW.{0}'.format(os.getpid()))
 
@@ -139,6 +138,10 @@ def _ingest_file(hdfs_client, new_file, hdfs_root_path, producer, topic):
             if not result:
                 logger.error('File failed to upload: ' + hdfs_file)
                 raise HdfsException
+            else:
+                rm_file = "rm {0}".format(new_file)
+                logger.info("Removing files from local staging: {0}".format(rm_file))
+                Util.execute_cmd(rm_file, logger)
 
         except HdfsException as err:
             logger.error('Exception: ' + err.exception)
