@@ -78,10 +78,10 @@ class SecureKerberosClient(KerberosClient):
         super(SecureKerberosClient, self).__init__(url, mutual_auth, session=session, **kwargs)
 
 
-# class HdfsException(HdfsError):
-#     def __init__(self, message):
-#         super(HdfsException, self).__init__(message)
-#         self.message = message
+class HdfsException(HdfsError):
+    def __init__(self, message):
+        super(HdfsException, self).__init__(message)
+        self.message = message
 
 
 def get_client(user=None):
@@ -136,7 +136,7 @@ def download_file(hdfs_path, local_path, overwrite=False, client=None):
         client = get_client()
 
     try:
-        client.download(hdfs_path,local_path, overwrite=overwrite)
+        client.download(hdfs_path, local_path, overwrite=overwrite)
         return True
     except HdfsError:
         return False

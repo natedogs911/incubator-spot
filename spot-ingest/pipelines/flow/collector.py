@@ -64,6 +64,7 @@ class Collector(object):
         self._processes = conf["collector_processes"]
         self._ingestion_interval = conf["ingestion_interval"]
         self._pool = Pool(processes=self._processes)
+        # TODO: review re-use of hdfs.client
         self._hdfs_client = hdfs.get_client()
 
     def start(self):
@@ -89,18 +90,24 @@ class Collector(object):
         if self._watcher.HasFiles:
             
             for x in range(0, self._processes):
-                print('processes: {0}'.format(self._processes))
+                self._logger.info('processes: {0}'.format(self._processes))
                 new_file = self._watcher.GetNextFile()
                 if self._processes <= 1:
-                    _ingest_file(self._hdfs_client, new_file, self._hdfs_root_path, self._producer, self._producer.Topic)
+                    _ingest_file(self._hdfs_client,
+                                 new_file,
+                                 self._hdfs_root_path,
+                                 self._producer,
+                                 self._producer.Topic
+                                 )
                 else:
                     result = self._pool.apply_async(_ingest_file, args=(
+                        self._hdfs_client,
                         new_file,
                         self._hdfs_root_path,
-                        self._producer.Topic,
-                        self._producer
+                        self._producer,
+                        self._producer.Topic
                     ))
-                    result.get()  # to debug add try and catch.
+                    # result.get()  # to debug add try and catch.
                 if not self._watcher.HasFiles:
                     break
         return True

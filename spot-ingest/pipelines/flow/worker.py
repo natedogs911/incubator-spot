@@ -133,7 +133,7 @@ class Worker(object):
         hdfs.mkdir(hdfs_staging_path)
 
         # move to stage.
-        local_file = "{0}{1}.csv"
+        local_file = "{0}{1}.csv".format(self._local_staging, file_name)
         self._logger.info("Moving data to staging: {0}".format(hdfs_staging_path))
         hdfs.upload_file(hdfs_staging_path, local_file)
 

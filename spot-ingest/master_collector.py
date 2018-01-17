@@ -84,7 +84,7 @@ def start_collector(type, workers_num, id=None):
     zk_port = MASTER_CONF["kafka"]['zookeper_port']
          
     topic = "{0}".format(type,ingest_id) if not id else id
-    kafka = KafkaProducer(topic, k_server, k_port, zk_server, zk_port, workers_num)
+    producer = KafkaProducer(topic, k_server, k_port, zk_server, zk_port, workers_num)
 
     # create a collector instance based on data source type.
     logger.info("Starting {0} ingest instance".format(topic))
@@ -93,7 +93,7 @@ def start_collector(type, workers_num, id=None):
                         fromlist=['Collector'])
 
     # start collector.
-    ingest_collector = module.Collector(MASTER_CONF['hdfs_app_path'], kafka, type)
+    ingest_collector = module.Collector(MASTER_CONF['hdfs_app_path'], producer, type)
     ingest_collector.start()
 
 
